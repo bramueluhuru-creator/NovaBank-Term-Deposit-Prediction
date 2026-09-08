@@ -1,0 +1,775 @@
+---
+title: "NovaBank Predictive Analytics Project"
+author: "Bramuel Uhuru Mwai"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+# NovaBank Predictive Analytics Capstone
+
+## Project Overview
+
+### Business Problem
+
+NovaBank aims to improve the effectiveness of its direct marketing campaigns for term deposits. Current campaigns contact a large number of customers, but only a small proportion subscribe, resulting in inefficient use of marketing resources.
+
+### Project Objective
+
+The objective of this project is to develop and evaluate predictive machine learning models that identify customers most likely to subscribe to a term deposit. The insights generated will support more targeted marketing campaigns, improve conversion rates, and optimize marketing expenditure.
+
+### Dataset
+
+- **Source:** UCI Machine Learning Repository – Bank Marketing Dataset
+- **Records:** 45,211 customer observations
+- **Programming Language:** R
+- **Models Evaluated:** Logistic Regression, Decision Tree, and Random Forest
+
+### Project Workflow
+
+1. Data Cleaning
+2. Exploratory Data Analysis
+3. Feature Engineering
+4. Predictive Modeling
+5. Model Evaluation
+6. Business Recommendations
+
+# Load Libraries & Setup
+
+This section loads the packages required for data manipulation, visualization, machine learning, and model evaluation. A random seed is also set to ensure that the analysis can be reproduced consistently.
+
+```{r setup, message=FALSE, warning=FALSE}
+
+# Load required libraries
+library(tidyverse)
+library(readr)
+library(caret)
+library(randomForest)
+library(rpart)
+library(rpart.plot)
+library(corrplot)
+library(dplyr)
+library(ggplot2)
+
+
+# Ensure reproducibility
+set.seed(123)
+
+```
+
+```{r import-data}
+
+# Import the dataset
+bank <- read_csv("data/raw/bank-full.csv")
+
+# Display the dimensions of the dataset
+dim(bank)
+
+# Preview the first six observations
+head(bank)
+
+# Display the structure of the dataset
+glimpse(bank)
+
+```
+# Data Understanding
+
+## Overview
+
+Before cleaning and analyzing the data, an initial assessment was conducted to understand the structure, variables, and overall quality of the dataset. This step provided an overview of the available features, identified the target variable, and established a foundation for subsequent data preparation and analysis.
+
+The objectives of this stage were to:
+
+- Examine the dataset dimensions and variable types.
+- Understand the purpose of each feature.
+- Identify the target variable and predictor variables.
+- Assess the overall quality of the raw dataset.
+
+```{r data-understanding}
+
+# View the first six rows
+head(bank)
+
+# View the structure
+str(bank)
+
+# Display dataset dimensions
+dim(bank)
+
+# Display variable names
+names(bank)
+
+# Generate summary statistics
+summary(bank)
+
+```
+### Key Findings
+
+The dataset consists of customer demographic, financial, and campaign-related variables, with **term deposit subscription (`y`)** as the target variable. Initial inspection confirmed that the dataset was successfully imported and contained the expected observations and variables. Understanding the data structure and feature types provided the foundation for the subsequent data cleaning and exploratory analysis.
+
+
+# Data Cleaning
+
+## Overview
+
+The Bank Marketing dataset required minimal cleaning because it was already well structured. Data preparation focused on converting categorical variables to the appropriate data types and assessing the presence of outliers in the numerical variables. These steps ensured that the dataset was suitable for exploratory analysis and predictive modeling.
+
+The objectives of this stage were to:
+
+- Convert categorical variables to factor data types.
+- Assess the distribution of numerical variables.
+- Identify potential outliers using the Interquartile Range (IQR) method.
+- Prepare the dataset for exploratory data analysis and machine learning.
+
+```{r data-cleaning}
+
+# Load cleaned dataset
+bank <- read.csv("data/cleaned/bank_clean.csv")               # Load the cleaned dataset
+# Convert categorical variables to factors
+bank$job <- as.factor(bank$job)
+bank$marital <- as.factor(bank$marital)
+bank$education <- as.factor(bank$education)
+bank$default <- as.factor(bank$default)
+bank$housing <- as.factor(bank$housing)
+bank$loan <- as.factor(bank$loan)
+bank$contact <- as.factor(bank$contact)
+bank$month <- as.factor(bank$month)
+bank$poutcome <- as.factor(bank$poutcome)
+bank$y <- as.factor(bank$y)
+
+# Function to count outliers using the IQR method
+count_outliers <- function(x) {
+  Q1 <- quantile(x, 0.25)
+  Q3 <- quantile(x, 0.75)
+  IQR_value <- IQR(x)
+
+  lower_bound <- Q1 - 1.5 * IQR_value
+  upper_bound <- Q3 + 1.5 * IQR_value
+
+  sum(x < lower_bound | x > upper_bound)
+}
+
+# Count outliers for all numeric variables
+outlier_counts <- sapply(bank[sapply(bank, is.numeric)], count_outliers)
+
+# Display the number of outliers in each numeric variable
+outlier_counts
+
+# Verify the updated data structure
+str(bank)
+
+```
+### Data Cleaning Summary
+
+The cleaned dataset was successfully prepared for analysis by ensuring that categorical variables were stored as factors and by assessing potential outliers using the Interquartile Range (IQR) method. Outliers were retained because they represent genuine customer observations and may contribute valuable information to the predictive models. The resulting dataset was suitable for exploratory data analysis and feature engineering.
+
+# Exploratory Data Analysis (EDA)
+
+## Overview
+
+Exploratory Data Analysis was conducted to identify patterns, relationships, and potential predictors of customer subscription to a term deposit. Both categorical and numerical variables were examined using summary statistics and visualizations to better understand customer characteristics and campaign outcomes.
+
+The objectives of this stage were to:
+
+- Explore the distribution of the target variable.
+- Examine relationships between customer characteristics and subscription outcomes.
+- Identify variables that may influence customer decisions.
+- Generate insights to guide feature selection for predictive modeling.
+
+```{r target-variable-distribution, fig.width=8, fig.height=5}
+
+# Target Variable Distribution
+
+# Display the frequency of the target variable
+table(bank$y)
+
+# Display the percentage distribution
+prop.table(table(bank$y)) * 100
+
+# Create a summary table
+target_distribution <- data.frame(
+  Count = table(bank$y),
+  Percentage = round(prop.table(table(bank$y)) * 100, 2)
+)
+
+target_distribution
+
+# Plot the target variable distribution
+ggplot(bank, aes(x = y)) +
+  geom_bar(fill = "steelblue") +
+  labs(
+    title = "Distribution of Customer Subscription",
+    x = "Subscription",
+    y = "Number of Customers"
+  )
+
+# Save the figure
+ggsave(
+  "outputs/figures/target_variable_distribution.png",
+  width = 8,
+  height = 5
+)
+
+```
+```{r numerical-variable-exploration, fig.width=8, fig.height=5}
+
+# Numerical Variable Exploration
+
+
+# Summary statistics
+summary(bank[sapply(bank, is.numeric)])
+
+# Identify numerical variables
+numeric_vars <- names(bank)[sapply(bank, is.numeric)]
+
+# Generate histograms
+for (var in numeric_vars) {
+
+  p <- ggplot(bank, aes_string(x = var)) +
+    geom_histogram(
+      bins = 30,
+      fill = "steelblue",
+      color = "black"
+    ) +
+    labs(
+      title = paste("Distribution of", var),
+      x = var,
+      y = "Frequency"
+    )
+
+  print(p)
+
+  ggsave(
+    filename = paste0(
+      "outputs/figures/",
+      var,
+      "_histogram.png"
+    ),
+    plot = p,
+    width = 8,
+    height = 5
+  )
+}
+
+```
+```{r correlation-analysis, fig.width=8, fig.height=6}
+
+# Correlation Analysis
+
+
+numeric_data <- bank[sapply(bank, is.numeric)]
+
+correlation_matrix <- cor(numeric_data)
+
+round(correlation_matrix, 2)
+
+corrplot(
+  correlation_matrix,
+  method = "color",
+  type = "upper",
+  order = "hclust",
+  addCoef.col = "black",
+  tl.col = "black",
+  tl.srt = 45,
+  number.cex = 0.7
+)
+
+# Save the heatmap
+png(
+  "outputs/figures/correlation_heatmap.png",
+  width = 1000,
+  height = 900
+)
+
+corrplot(
+  correlation_matrix,
+  method = "color",
+  type = "upper",
+  order = "hclust",
+  addCoef.col = "black",
+  tl.col = "black",
+  tl.srt = 45,
+  number.cex = 0.7
+)
+
+dev.off()
+
+```
+```{r categorical-variable-analysis, fig.width=8, fig.height=5}
+
+
+# Categorical Variable Analysis
+
+categorical_vars <- c(
+  "job",
+  "marital",
+  "education",
+  "default",
+  "housing",
+  "loan",
+  "contact",
+  "month",
+  "poutcome"
+)
+
+for (var in categorical_vars) {
+
+  p <- ggplot(bank, aes_string(x = var, fill = "y")) +
+    geom_bar(position = "fill") +
+    scale_y_continuous(labels = scales::percent) +
+    labs(
+      title = paste("Subscription Rate by", tools::toTitleCase(var)),
+      x = tools::toTitleCase(var),
+      y = "Percentage",
+      fill = "Subscription"
+    ) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+  print(p)
+
+  ggsave(
+    filename = paste0(
+      "outputs/figures/",
+      var,
+      "_subscription_rate.png"
+    ),
+    plot = p,
+    width = 8,
+    height = 5
+  )
+}
+
+```
+```{r boxplots-by-subscription, fig.width=8, fig.height=5}
+
+
+# Numerical Variables by Subscription
+
+
+numeric_vars <- c(
+  "age",
+  "balance",
+  "day",
+  "duration",
+  "campaign",
+  "pdays",
+  "previous"
+)
+
+for (var in numeric_vars) {
+
+  p <- ggplot(
+    bank,
+    aes_string(
+      x = "y",
+      y = var,
+      fill = "y"
+    )
+  ) +
+    geom_boxplot() +
+    labs(
+      title = paste(
+        tools::toTitleCase(var),
+        "by Subscription Status"
+      ),
+      x = "Subscription",
+      y = tools::toTitleCase(var)
+    ) +
+    theme_minimal() +
+    theme(legend.position = "none")
+
+  print(p)
+
+  ggsave(
+    filename = paste0(
+      "outputs/figures/",
+      var,
+      "_boxplot.png"
+    ),
+    plot = p,
+    width = 8,
+    height = 5
+  )
+}
+
+```
+## Exploratory Data Analysis Summary
+
+The exploratory data analysis identified several variables that demonstrated stronger relationships with customer subscription, particularly **job**, **month**, **previous campaign outcome (poutcome)**, and **pdays**. These findings provided valuable business insights into customer behaviour and campaign effectiveness. However, for predictive modeling, all available predictor variables were retained except **duration**. Retaining the full set of relevant predictors allowed the machine learning models to evaluate the contribution of each feature while preserving potentially useful information. The variable **duration** was excluded because it is only known after a marketing call has been completed and would introduce data leakage, resulting in overly optimistic model performance.
+
+# Feature Engineering
+## Overview
+
+Feature engineering involves preparing the dataset for machine learning by selecting appropriate variables, removing potential sources of bias, and ensuring that the predictors represent information available at the time of prediction. 
+
+In this project, the main focus is preventing data leakage while retaining relevant customer and campaign information. The `duration` variable was removed because it is only known after customer contact and would result in unrealistic model performance. All other variables were retained to allow the machine learning models to identify hidden patterns and relationships within the data.
+
+```{r feature-engineering}
+# Remove variables that cause data leakage
+
+bank_model <- bank %>%                                        # Create the modeling dataset
+  select(-duration)                                           # Remove call duration because it is unknown before the call
+
+
+# Inspect the processed dataset
+
+
+str(bank_model)                                               # Display the dataset structure
+
+summary(bank_model)                                           # Display summary statistics
+
+
+# Save processed dataset
+
+write.csv(                                                    # Save the processed dataset
+  bank_model,
+  "data/processed/bank_model.csv",
+  row.names = FALSE
+)
+
+cat("Feature-engineered dataset saved successfully!\n")       # Display a success message
+```
+### Feature Engineering Summary
+
+The feature engineering process focused on creating a realistic dataset for predictive modelling. The `duration` variable was removed because it represents the length of the customer contact and is only available after the marketing interaction has occurred. Including this variable would introduce data leakage and result in an overestimated model performance.
+
+After removing the leakage variable, the remaining customer demographic, financial, and campaign-related variables were retained. This approach allows the machine learning algorithms to identify important relationships and interactions among predictors without restricting the model to only variables identified during exploratory analysis.
+
+The final feature-engineered dataset was inspected and saved for use in the predictive modelling stage.
+
+# Predictive Modelling
+## Overview
+
+Predictive modelling involves developing machine learning models that can identify customers who are likely to subscribe to NovaBank's term deposit product. In this stage, the prepared dataset is divided into training, validation, and testing sets, and multiple classification algorithms are developed and evaluated.
+
+The models will be compared using performance metrics such as accuracy, sensitivity (recall), specificity, and balanced accuracy. Since the business objective is to identify potential subscribers, correctly predicting the positive class (`yes`) is an important consideration when selecting the final model.
+
+```{r data-splitting}
+# Split Dataset
+
+# Create training dataset (60%)
+train_index <- createDataPartition(                          # Create indices for the training set
+  bank_model$y,
+  p = 0.60,
+  list = FALSE
+)
+
+train_data <- bank_model[train_index, ]                      # Training dataset
+remaining_data <- bank_model[-train_index, ]                 # Remaining observations
+
+# Split remaining data into validation and testing sets
+validation_index <- createDataPartition(                     # Create indices for the validation set
+  remaining_data$y,
+  p = 0.50,
+  list = FALSE
+)
+
+validation_data <- remaining_data[validation_index, ]        # Validation dataset
+test_data <- remaining_data[-validation_index, ]             # Testing dataset
+
+# Verify Dataset Splits
+
+
+dim(train_data)                                              # Display training dataset dimensions
+dim(validation_data)                                         # Display validation dataset dimensions
+dim(test_data)                                               # Display testing dataset dimensions
+
+prop.table(table(train_data$y))                              # Display class distribution in the training set
+prop.table(table(validation_data$y))                         # Display class distribution in the validation set
+prop.table(table(test_data$y))                               # Display class distribution in the testing set
+```
+```{r logistic-regression-model}
+
+# Build Logistic Regression Model
+
+
+logistic_model <- glm(                                       # Train a logistic regression model
+  y ~ .,                                                     # Use all available predictor variables
+  data = train_data,                                         # Use the training dataset
+  family = binomial(link = "logit")                          # Specify binary logistic regression
+)
+
+summary(logistic_model)                                      # Display model summary
+```
+```{r decision-tree}
+
+# Build and Prune Decision Tree
+
+
+# Grow a large decision tree
+decision_tree <- rpart(
+  y ~ .,                                                     # Use all predictor variables
+  data = train_data,                                         # Training dataset
+  method = "class",                                          # Classification tree
+  control = rpart.control(
+    cp = 0.0005,                                             # Grow a large tree
+    minsplit = 20,                                           # Minimum observations before splitting
+    minbucket = 10,                                          # Minimum observations in terminal nodes
+    maxdepth = 30                                             # Allow deep trees
+  )
+)
+
+# Display the complexity parameter table
+printcp(decision_tree)
+
+# Plot the cross-validation error
+plotcp(decision_tree)
+
+
+# Automatically prune to approximately 12 terminal nodes
+
+
+cp_table <- decision_tree$cptable                            # Extract CP table
+
+target_splits <- 11                                          # 11 splits ≈ 12 terminal nodes
+
+closest_row <- which.min(abs(cp_table[, "nsplit"] - target_splits))
+
+selected_cp <- cp_table[closest_row, "CP"]                   # Select corresponding CP value
+
+cat("Selected CP:", selected_cp, "\n")
+
+# Prune the tree
+pruned_tree <- prune(
+  decision_tree,
+  cp = selected_cp
+)
+
+# Display the pruned tree
+rpart.plot(
+  pruned_tree,
+  type = 2,
+  extra = 104,
+  fallen.leaves = TRUE,
+  cex = 0.8,
+  tweak = 1.2
+)
+
+# Save the tree
+png(
+  "outputs/pruned_decision_tree.png",
+  width = 2600,
+  height = 1800,
+  res = 300
+)
+
+rpart.plot(
+  pruned_tree,
+  type = 2,
+  extra = 104,
+  fallen.leaves = TRUE,
+  cex = 0.8,
+  tweak = 1.2
+)
+
+dev.off()
+
+# Display the final tree summary
+print(pruned_tree)
+```
+```{r random-forest-model}
+
+
+# Build Random Forest Model
+
+
+set.seed(123)                                                # Ensure reproducibility
+
+random_forest <- randomForest(                               # Train a Random Forest model
+  y ~ .,                                                     # Use all available predictor variables
+  data = train_data,                                         # Use the training dataset
+  ntree = 500,                                               # Grow 500 trees
+  mtry = floor(sqrt(ncol(train_data) - 1)),                  # Select predictors randomly at each split
+  importance = TRUE                                          # Calculate variable importance
+)
+
+print(random_forest)                                         # Display model summary
+
+varImpPlot(random_forest)                                    # Display variable importance plot
+
+# Save the Variable Importance Plot
+png("outputs/random_forest_variable_importance.png",
+    width = 2000,
+    height = 1200,
+    res = 300)
+
+varImpPlot(random_forest)
+
+dev.off()
+```
+
+```{r model-prediction-and-confusion_matrices}
+
+# Generate Predictions on Validation Set
+
+
+# Logistic Regression Predictions
+logistic_prob <- predict(                                    # Predict probabilities
+  logistic_model,
+  newdata = validation_data,
+  type = "response"
+)
+
+logistic_pred <- ifelse(                                     # Convert probabilities into class labels
+  logistic_prob >= 0.50,
+  "yes",
+  "no"
+)
+
+logistic_pred <- factor(                                     # Convert predictions to factors
+  logistic_pred,
+  levels = c("no", "yes")
+)
+
+# Decision Tree Predictions
+tree_pred <- predict(                                        # Predict classes
+  decision_tree,
+  newdata = validation_data,
+  type = "class"
+)
+
+# Random Forest Predictions
+forest_pred <- predict(                                      # Predict classes
+  random_forest,
+  newdata = validation_data,
+  type = "class"
+)
+
+
+# Confusion Matrices
+
+
+logistic_cm <- confusionMatrix(                              # Evaluate Logistic Regression
+  data = logistic_pred,
+  reference = validation_data$y,
+  positive = "yes"
+)
+
+tree_cm <- confusionMatrix(                                  # Evaluate Decision Tree
+  data = tree_pred,
+  reference = validation_data$y,
+  positive = "yes"
+)
+
+forest_cm <- confusionMatrix(                                # Evaluate Random Forest
+  data = forest_pred,
+  reference = validation_data$y,
+  positive = "yes"
+)
+
+# Display Results
+logistic_cm                                                  # Logistic Regression performance
+
+tree_cm                                                      # Decision Tree performance
+
+forest_cm                                                    # Random Forest performance
+```
+```{r final random-forest-test-evaluation}
+# Evaluate Random Forest on the Test Set
+
+
+# Predict customer classes using the Random Forest model
+test_pred <- predict(                                        # Generate predictions
+  random_forest,                                              # Use the trained Random Forest model
+  newdata = test_data,                                        # Predict on the unseen test dataset
+  type = "class"                                              # Return predicted class labels
+)
+
+# Create the confusion matrix
+test_cm <- confusionMatrix(                                   # Compare predictions with actual outcomes
+  data = test_pred,                                           # Predicted customer classes
+  reference = test_data$y,                                    # Actual customer classes
+  positive = "yes"                                            # Treat "yes" as the positive class
+)
+
+# Display the model performance
+test_cm                                                       # Show the confusion matrix and evaluation metrics
+```
+
+### Predictive Modelling Summary
+
+The predictive modelling stage focused on developing machine learning models to predict customers who are likely to subscribe to NovaBank's term deposit product.
+
+Key steps and decisions included:
+
+- **Dataset splitting**
+  - The dataset was divided into training, validation, and testing sets using a stratified **60/20/20 split**.
+  - Stratified sampling was used to maintain a consistent distribution of subscribed and non-subscribed customers across all datasets.
+
+- **Model development**
+  - Three classification models were developed:
+    - Logistic Regression as a baseline model.
+    - Decision Tree for improved interpretability and identifying decision patterns.
+    - Random Forest for capturing complex relationships and improving predictive performance.
+  - All models used the available predictors after removing the `duration` variable to prevent data leakage.
+
+- **Model evaluation**
+  - Confusion matrices were used to evaluate model performance.
+  - The positive class was defined as customers who subscribed (`yes`).
+  - Evaluation focused on accuracy, sensitivity (recall), specificity, and balanced accuracy.
+
+- **Business relevance**
+  - Identifying customers likely to subscribe is more valuable than simply achieving high overall accuracy because the dataset contains more non-subscribers than subscribers.
+  - Sensitivity (recall) was considered important because it measures the model's ability to correctly identify potential customers for targeted marketing campaigns.
+
+- **Final model testing**
+  - The Random Forest model was evaluated on an unseen test dataset to assess how well it generalizes to new customer data.
+  
+  
+# 8. Business Recommendations
+
+Based on the exploratory analysis and predictive modelling results, several recommendations can be made to help NovaBank improve its customer targeting strategy and increase the effectiveness of future marketing campaigns.
+
+Key recommendations:
+
+- **Prioritize customers with positive previous campaign outcomes**
+  - Customers with successful outcomes from previous marketing campaigns demonstrated a higher likelihood of subscribing.
+  - NovaBank should prioritize these customers during future campaigns because their previous engagement indicates a stronger potential for conversion.
+
+- **Use customer characteristics to improve campaign targeting**
+  - Variables such as customer occupation, contact month, and previous campaign information provided useful insights into subscription behaviour.
+  - Marketing campaigns should be tailored toward customer segments that demonstrate higher subscription probabilities rather than applying the same approach to all customers.
+
+- **Use predictive modelling to support marketing decisions**
+  - The Random Forest model can be used to rank customers based on their likelihood of subscribing.
+  - Marketing teams can focus resources on high-probability customers, improving efficiency and reducing unnecessary outreach.
+
+- **Improve RECALL in future models**
+  - The current model correctly identifies only about 23% of actual subscribers, meaning many potential customers are still missed. 
+  - Future work should focus on improving Recall while maintaining acceptable Precision by exploring:
+  1. SMOTE or other class-balancing techniques
+  2. Threshold tuning
+  3. Cost-sensitive learning
+  4. Hyperparameter optimization
+  5. Ensemble model refinement
+
+
+Overall, the predictive model provides NovaBank with a data-driven approach for identifying potential subscribers and improving the efficiency of marketing campaigns.
+
+# 9. Conclusion
+
+This project developed a machine learning solution to help NovaBank predict customers who are likely to subscribe to a term deposit product.
+
+Key outcomes:
+
+- **Business problem addressed**
+  - NovaBank needed a way to improve customer targeting and identify potential subscribers before conducting marketing campaigns.
+  - A predictive analytics approach was used to support more informed and efficient decision-making.
+
+- **Analytical approach used**
+  - The project followed the analytics lifecycle:
+    - Data understanding and preparation.
+    - Exploratory data analysis to identify customer and campaign patterns.
+    - Feature engineering to remove data leakage and prepare the dataset.
+    - Predictive modelling using Logistic Regression, Decision Tree, and Random Forest algorithms.
+
+- **Model development outcome**
+  - The Random Forest model was selected as the final model because it was able to capture complex relationships within the data and provide strong predictive performance compared to simpler models.
+  - The model was evaluated using validation and unseen test data to assess its ability to generalize to new customers.
+
+- **Expected business value**
+  - The model enables NovaBank to focus marketing efforts on customers with a higher likelihood of subscription.
+  - This can improve campaign efficiency, reduce wasted resources, and support better customer engagement strategies.
+
+In conclusion, predictive analytics provides NovaBank with a practical framework for moving from broad marketing campaigns toward a more targeted, data-driven customer acquisition strategy.
+  
