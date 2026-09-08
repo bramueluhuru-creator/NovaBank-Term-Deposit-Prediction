@@ -95,17 +95,31 @@ The project follows an end-to-end data analytics and machine learning workflow:
 
 ## Machine Learning Models
 
+Three classification models were evaluated:
+
 | Model | Purpose |
 |---|---|
 | Logistic Regression | Interpretable baseline classification model |
 | Decision Tree | Captures nonlinear relationships and provides interpretable decision rules |
-| Random Forest | Ensemble model designed to improve predictive performance and capture more complex relationships |
+| Random Forest | Ensemble model designed to improve predictive performance and capture complex relationships |
 
-Random Forest was selected as the final model based on its overall performance across the evaluation metrics.
+### Model Performance
 
-> **Note:** Model performance metrics are documented in the project notebook and modeling scripts.
+The models were evaluated using accuracy, sensitivity, specificity, balanced accuracy, and Cohen's Kappa on the validation dataset.
 
----
+| Metric | Logistic Regression | Decision Tree | Random Forest |
+|---|---:|---:|---:|
+| Accuracy | 89.25% | 88.95% | **89.49%** |
+| Sensitivity (Yes) | 17.01% | **24.01%** | 23.25% |
+| Specificity (No) | **98.82%** | 97.56% | 98.27% |
+| Balanced Accuracy | 57.92% | **60.78%** | 60.76% |
+| Kappa | 0.2334 | 0.2874 | **0.2974** |
+
+### Model Selection
+
+Random Forest delivered the strongest overall predictive performance, achieving the highest accuracy (89.49%) and Kappa (0.2974). It was therefore selected as the recommended model for customer targeting.
+
+While the Decision Tree achieved slightly higher sensitivity and balanced accuracy, Random Forest provided the strongest overall performance across the evaluation metrics.
 
 ## Business Recommendations
 
